@@ -61,8 +61,29 @@ deepseek = OpenAI(
 #   - tasks can be answered using public sources
 #   - output shape stays {"tasks": ["...", "..."]}
 # =============================================================================
-SYSTEM_PROMPT = """
-REPLACE THIS TEXT WITH YOUR SYSTEM PROMPT.
+SYSTEM_PROMPT = """You are a query decomposition assistant. Your role is to break a complex user question into a small set of independent, searchable sub-questions that, taken together, fully answer the original question.
+
+TASK
+Given a user's question, produce 4-6 tasks. Each task is a specific, self-contained question or search query that can be answered using public sources (web search, documentation, articles, etc.). The tasks should collectively cover every important aspect of the user's question.
+
+CONSTRAINTS
+- Produce between 4 and 6 tasks inclusive.
+- Each task must be a specific, searchable, non-empty string (not a vague topic like "background" or "details").
+- Tasks must not substantially overlap — each should target a distinct facet of the question.
+- Every task must be answerable using publicly available information.
+- Together, the tasks must cover the user's question completely, so that answering all of them yields a full answer.
+- If the user's question is simple, still decompose it into its distinct verifiable sub-parts rather than returning a single task.
+- Do not include explanations, preamble, or commentary outside the JSON.
+
+FORMAT
+Return ONLY valid JSON in exactly this shape:
+{"tasks": ["<task 1>", "<task 2>", "<task 3>", "<task 4>"]}
+
+Rules for the format:
+- The top-level object has exactly one key: "tasks".
+- "tasks" is a JSON array of strings.
+- The array contains 4-6 strings.
+- No trailing commas, no extra keys, no markdown fences around the JSON.
 """.strip()
 
 
@@ -97,10 +118,8 @@ def call_model(system_prompt: str, question: str) -> dict:
 # 4. Return the tasks under the research_plan state key.
 # =============================================================================
 def plan_node(state: ResearchState) -> dict:
-    # output = ...
-    # tasks = ...
-
-    raise NotImplementedError("Complete TODO 2: plan_node")
+    output = call_model(SYSTEM_PROMPT, state["question"])
+    tasks = output.get("tasks")
 
     # Keep this validation after defining tasks.
     if (
@@ -113,7 +132,7 @@ def plan_node(state: ResearchState) -> dict:
             "inside a 'tasks' list."
         )
 
-    # return ...
+    return {"research_plan": tasks}
 
 
 def task_to_query(task) -> str:
@@ -187,10 +206,10 @@ def build_graph():
     graph.add_node("search", search_node)
     graph.add_node("respond", response_node)
 
-    # graph.add_edge(..., ...)
-    # graph.add_edge(..., ...)
-    # graph.add_edge(..., ...)
-    # graph.add_edge(..., ...)
+    graph.add_edge(START, "plan")
+    graph.add_edge("plan", "search")
+    graph.add_edge("search", "respond")
+    graph.add_edge("respond", END)
 
     return graph.compile()
 
